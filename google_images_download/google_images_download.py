@@ -39,7 +39,8 @@ args_list = ["keywords", "keywords_from_file", "prefix_keywords", "suffix_keywor
              "exact_size", "aspect_ratio", "type", "time", "time_range", "delay", "url", "single_image",
              "output_directory", "image_directory", "no_directory", "proxy", "similar_images", "specific_site",
              "print_urls", "print_size", "print_paths", "metadata", "extract_metadata", "socket_timeout",
-             "thumbnail", "language", "prefix", "chromedriver", "related_images", "safe_search", "no_numbering"]
+             "thumbnail", "language", "prefix", "chromedriver", "related_images", "safe_search", "no_numbering",
+             "only_metadata","no_logging"]
 
 
 def user_input():
@@ -701,24 +702,30 @@ class googleimagesdownload:
                 #format the item for readability
                 object = self.format_object(object)
                 if arguments['metadata']:
-                    print("\nImage Metadata: " + str(object))
+                    if not arguments["no_logging"]:
+                        print("\nImage Metadata: " + str(object))
 
                 items.append(object)  # Append all the links in the list named 'Links'
-
                 #download the images
-                download_status,download_message,return_image_name,absolute_path = self.download_image(object['image_link'],object['image_format'],main_directory,dir_name,count,arguments['print_urls'],arguments['socket_timeout'],arguments['prefix'],arguments['print_size'],arguments['no_numbering'])
-                print(download_message)
-                if download_status == "success":
+                if not arguments["only_metadata"]:
+                    download_status,download_message,return_image_name,absolute_path = self.download_image(object['image_link'],object['image_format'],main_directory,dir_name,count,arguments['print_urls'],arguments['socket_timeout'],arguments['prefix'],arguments['print_size'],arguments['no_numbering'])
+                    if not arguments["no_logging"]:
+                        print(download_message)
+                if arguments["only_metadata"]:
+                    count +=1
+                if not arguments["only_metadata"]:
+                    if download_status == "success":
 
-                    # download image_thumbnails
-                    if arguments['thumbnail']:
-                        download_status, download_message_thumbnail = self.download_image_thumbnail(object['image_thumbnail_url'],main_directory,dir_name,return_image_name,arguments['print_urls'],arguments['socket_timeout'],arguments['print_size'])
-                        print(download_message_thumbnail)
+                        # download image_thumbnails
+                        if arguments['thumbnail']:
+                            download_status, download_message_thumbnail = self.download_image_thumbnail(object['image_thumbnail_url'],main_directory,dir_name,return_image_name,arguments['print_urls'],arguments['socket_timeout'],arguments['print_size'])
+                            if not arguments["no_logging"]:
+                                print(download_message_thumbnail)
 
-                    count += 1
-                    abs_path.append(absolute_path)
-                else:
-                    errorCount += 1
+                        count += 1
+                        abs_path.append(absolute_path)
+                    else:
+                        errorCount += 1
 
                 #delay param
                 if arguments['delay']:
@@ -727,9 +734,12 @@ class googleimagesdownload:
                 page = page[end_content:]
             i += 1
         if count < limit:
-            print("\n\nUnfortunately all " + str(
+            if not arguments["no_logging"]:
+                print("\n\nUnfortunately all " + str(
                 limit) + " could not be downloaded because some images were not downloadable. " + str(
                 count-1) + " is all we got for this search filter!")
+                if not arguments["only_metadata"]:
+                    return items
         return items,errorCount,abs_path
 
 
@@ -811,14 +821,17 @@ class googleimagesdownload:
             os.environ["https_proxy"] = arguments['proxy']
             ######Initialization Complete
 
+
+
         paths = {}
         for pky in prefix_keywords:
             for sky in suffix_keywords:     # 1.for every suffix keywords
                 i = 0
                 while i < len(search_keyword):      # 2.for every main keyword
                     iteration = "\n" + "Item no.: " + str(i + 1) + " -->" + " Item name = " + str(pky) + str(search_keyword[i] + str(sky))
-                    print(iteration)
-                    print("Evaluating...")
+                    if not arguments["no_logging"]:
+                        print(iteration)
+                        print("Evaluating...")
                     search_term = pky + search_keyword[i] + sky
 
                     if arguments['image_directory']:
@@ -827,8 +840,8 @@ class googleimagesdownload:
                         dir_name = ''
                     else:
                         dir_name = search_term + ('-' + arguments['color'] if arguments['color'] else '')   #sub-directory
-
-                    self.create_directories(main_directory,dir_name,arguments['thumbnail'])     #create directories in OS
+                    if not arguments["only_metadata"]:
+                        self.create_directories(main_directory,dir_name,arguments['thumbnail'])     #create directories in OS
 
                     params = self.build_url_parameters(arguments)     #building URL with params
 
@@ -838,10 +851,14 @@ class googleimagesdownload:
                         raw_html = self.download_page(url)  # download page
                     else:
                         raw_html = self.download_extended_page(url,arguments['chromedriver'])
+                    if not arguments["no_logging"]:
+                        print("Starting Download...")
+                    if not arguments["only_metadata"]:
+                        items,errorCount,abs_path = self._get_all_items(raw_html,main_directory,dir_name,limit,arguments)    #get all image items and download images
+                        paths[pky + search_keyword[i] + sky] = abs_path
+                    else:
+                        items = self._get_all_items(raw_html,main_directory,dir_name,limit,arguments)
 
-                    print("Starting Download...")
-                    items,errorCount,abs_path = self._get_all_items(raw_html,main_directory,dir_name,limit,arguments)    #get all image items and download images
-                    paths[pky + search_keyword[i] + sky] = abs_path
 
                     #dumps into a text file
                     if arguments['extract_metadata']:
@@ -856,11 +873,13 @@ class googleimagesdownload:
 
                     #Related images
                     if arguments['related_images']:
-                        print("\nGetting list of related keywords...this may take a few moments")
+                        if not arguments["no_logging"]:
+                            print("\nGetting list of related keywords...this may take a few moments")
                         tabs = self.get_all_tabs(raw_html)
                         for key, value in tabs.items():
                             final_search_term = (search_term + " - " + key)
-                            print("\nNow Downloading - " + final_search_term)
+                            if not arguments["no_logging"]:
+                                print("\nNow Downloading - " + final_search_term)
                             if limit < 101:
                                 new_raw_html = self.download_page(value)  # download page
                             else:
@@ -869,10 +888,16 @@ class googleimagesdownload:
                             self._get_all_items(new_raw_html, main_directory, search_term + " - " + key, limit,arguments)
 
                     i += 1
-                    print("\nErrors: " + str(errorCount) + "\n")
+                    if not arguments["only_metadata"]:
+                        if not arguments["no_logging"]:
+                            print("\nErrors: " + str(errorCount) + "\n")
         if arguments['print_paths']:
             print(paths)
-        return paths
+        if not arguments["only_metadata"]:
+            return paths
+
+        if arguments["only_metadata"]:
+            return items
 
 #------------- Main Program -------------#
 def main():
